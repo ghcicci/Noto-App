@@ -1,3 +1,4 @@
+// Signup Screen, Name, Email, Password
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -28,7 +29,7 @@ export default function SignupScreen() {
  const checkPass = (p: string) => {
    if (p.length < 8) return 'Password must be at least 8 characters';
    if (!/\d/.test(p)) return 'Password must contain at least one number';
-   if (!/[!@#$%^&*(),.?":{}|<>]/.test(p)) return 'Password must contain at least one special character';
+   if (!/[!@#$%^&*(),.?":{}|<>=+\-_[\]\\\/~`';]/.test(p)) return 'Password must contain at least one special character';
    return null;
  };
 
@@ -50,25 +51,27 @@ export default function SignupScreen() {
 
    setBusy(true);
    try {
-     const { data: auth, error: authErr } = await supabase.auth.signUp({ email: e, password: pass });
+     const { data: auth, error: authErr } = await supabase.auth.signUp({ 
+       email: e, 
+       password: pass,
+       options: {
+         data: {
+           first_name: f,
+           last_name: l
+         }
+       }
+     });
+     
      if (authErr) {
        Alert.alert('Signup Failed', authErr.message);
        return;
      }
 
-     if (auth?.user) {
-       const { error: profErr } = await supabase
-         .from('profiles')
-         .update({ first_name: f, last_name: l })
-         .eq('id', auth.user.id);
-
-       if (profErr) console.warn('Profile update error:', profErr);
-       Alert.alert(
-         'Success',
-         'Account created. Check your email to verify your account.',
-         [{ text: 'OK', onPress: () => nav.goBack() }]
-       );
-     }
+     Alert.alert(
+       'Success',
+       'Account created successfully!',
+       [{ text: 'OK', onPress: () => nav.goBack() }]
+     );
    } catch {
      Alert.alert('Error', 'An unexpected error occurred');
    } finally {
