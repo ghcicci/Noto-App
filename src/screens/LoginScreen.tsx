@@ -33,10 +33,10 @@ export default function LoginScreen() {
      const { error } = await supabase.auth.signInWithPassword({ email: e, password: pass });
      if (error) {
        Alert.alert('Login Failed', error.message);
+       setBusy(false);
        return;
      }
-     // Optional: navigate after success
-     nav.goBack();
+     // Don't navigate - auth state change will automatically take user to Home
    } catch {
      Alert.alert('Error', 'Oopsie daisey... An unexpected error occurred');
    } finally {
@@ -45,7 +45,7 @@ export default function LoginScreen() {
  };
 
  const onForgot = () => {
-   Alert.alert('Forgot Password', 'Add your password reset flow here.');
+   Alert.alert('Forgot Password', 'Add password reset flow here.');
    // Will send email to user
  };
 
@@ -96,7 +96,7 @@ export default function LoginScreen() {
 
      <View style={s.actions}>
        <TouchableOpacity style={[s.primary, busy && s.disabled]} onPress={onLogin} disabled={busy}>
-         <Text style={s.primaryText}>{busy ? 'Logging you in...' : 'Logged in'}</Text>
+         <Text style={s.primaryText}>{busy ? 'Logging you in...' : 'Log in'}</Text>
        </TouchableOpacity>
      </View>
    </View>

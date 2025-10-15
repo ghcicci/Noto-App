@@ -1,4 +1,4 @@
-// Signup Screen, Name, Email, Password
+// Signup Screen, Name, Email, Passwor
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -64,14 +64,11 @@ export default function SignupScreen() {
      
      if (authErr) {
        Alert.alert('Signup Failed', authErr.message);
+       setBusy(false);
        return;
      }
 
-     Alert.alert(
-       'Success',
-       'Account created successfully!',
-       [{ text: 'OK', onPress: () => nav.goBack() }]
-     );
+     // Don't navigate - auth state change will automatically take user to Home
    } catch {
      Alert.alert('Error', 'An unexpected error occurred');
    } finally {
