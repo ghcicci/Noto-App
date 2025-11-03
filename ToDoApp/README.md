@@ -2,8 +2,6 @@
 
 React Native task management app for ECE 49401 Senior Design.
 
-What's Working (but currently not connected to Supabase, trying to fix that with Chewon)
-
 Authentication:
 - Welcome screen with signup/login navigation
 - User signup with name, email, password (validates 8+ chars, number, special char)
@@ -20,7 +18,13 @@ Tech Stack:
 - Supabase (backend database + auth)
 - React Navigation
 
+Screens Completed:
+- Welcome Screen
+- Login Screen (Existing user)
+- Signup Screen (New user)
+- Home/Task Screen
+- Calendar Screen
+
 Next:
-- Connect to Supabase
-- Get confirmation email to send to user (think Supabase supports this)
-- Get user onto the homepage of the app where they can make tasks (will be completed over Fall Break before Demo)
+- Focus Mode Screen
+- Settings Screen (only allows user to signout right now)

@@ -1,3 +1,4 @@
+// Registers navigation, global providers, and the auth gate (decides between Welcome/Login/Signup vs. main app)
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -6,7 +7,7 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/config/supabase';
 import * as Font from 'expo-font';
 
-// Icons for bottom bar
+// Icons for bottom bar (custom)
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6'; 
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Feather from '@expo/vector-icons/Feather';
@@ -20,11 +21,13 @@ import SignupScreen from './src/screens/SignupScreen';
 // Main App Screens
 import HomeScreen from './src/screens/HomeScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
+import DayViewScreen from './src/screens/DayViewScreen';
 import FocusModeScreen from './src/screens/FocusModeScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 
 const AuthStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const CalendarStack = createNativeStackNavigator();
 
 function AuthNavigator() {
   return (
@@ -38,6 +41,15 @@ function AuthNavigator() {
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen name="Signup" component={SignupScreen} />
     </AuthStack.Navigator>
+  );
+}
+
+function CalendarStackNavigator() {
+  return (
+    <CalendarStack.Navigator screenOptions={{ headerShown: false }}>
+      <CalendarStack.Screen name="CalendarView" component={CalendarScreen} />
+      <CalendarStack.Screen name="DayView" component={DayViewScreen} />
+    </CalendarStack.Navigator>
   );
 }
 
@@ -70,7 +82,7 @@ function MainTabNavigator() {
       />
       <Tab.Screen 
         name="Calendar" 
-        component={CalendarScreen}
+        component={CalendarStackNavigator}
         options={{
           tabBarIcon: ({ color }) => (
             <AntDesign name="calendar" size={24} color={color} />
