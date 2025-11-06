@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { AntDesign, Entypo } from '@expo/vector-icons';
+import { supabase } from '../config/supabase';
 
 interface FocusTask {
   id: string;
@@ -23,15 +25,17 @@ export default function FocusModeScreen() {
   const [hours, setHours] = useState('');
   const [minutes, setMinutes] = useState('');
   const [menuVisible, setMenuVisible] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const addTask = () => {
     if (!newTaskText.trim() || tasks.length >= 4) {
       setAddingTask(false);
+      setNewTaskText('');
       return;
     }
 
     const newTask: FocusTask = {
-      id: Date.now().toString(),
+      id: `${Date.now()}-${Math.random()}`,
       description: newTaskText.trim(),
       completed: false,
     };
@@ -54,8 +58,40 @@ export default function FocusModeScreen() {
     setMenuVisible(null);
   };
 
-  const handleSyncToDevice = () => {
-    // Non-functional for now
+  const handleSyncToDevice = async () => {
+    if (tasks.length === 0) {
+      Alert.alert('No Tasks', 'Please add at least one task before syncing.');
+      return;
+    }
+
+    setSyncing(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Error', 'No user logged in');
+        setSyncing(false);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('study_session')
+        .insert({
+          profile_id: user.id,
+          tasks: tasks,
+        });
+
+      if (error) {
+        Alert.alert('Sync Failed', error.message);
+        setSyncing(false);
+        return;
+      }
+
+      Alert.alert('Success', 'Study session synced!');
+    } catch (err) {
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setSyncing(false);
+    }
   };
 
   return (
@@ -65,8 +101,8 @@ export default function FocusModeScreen() {
 
         <Text style={styles.sectionTitle}>Session Tasks</Text>
 
-        {tasks.map((task) => (
-          <View key={task.id} style={styles.taskRow}>
+        {tasks.map((task, index) => (
+          <View key={task.id} style={[styles.taskRow, { zIndex: 1000 - index }]}>
             <TouchableOpacity
               onPress={() => toggleTask(task.id)}
               style={styles.checkbox}
@@ -115,9 +151,16 @@ export default function FocusModeScreen() {
               placeholder="Add task"
               placeholderTextColor="#A9ABAF"
               onSubmitEditing={addTask}
+              onBlur={() => {
+                if (newTaskText.trim()) {
+                  addTask();
+                } else {
+                  setAddingTask(false);
+                  setNewTaskText('');
+                }
+              }}
               autoFocus
               returnKeyType="done"
-              blurOnSubmit={true}
             />
           </View>
         ) : tasks.length < 4 ? (
@@ -171,10 +214,13 @@ export default function FocusModeScreen() {
         </View>
 
         <TouchableOpacity
-          style={styles.syncButton}
+          style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
           onPress={handleSyncToDevice}
+          disabled={syncing}
         >
-          <Text style={styles.syncButtonText}>Sync to device</Text>
+          <Text style={styles.syncButtonText}>
+            {syncing ? 'Syncing...' : 'Sync to device'}
+          </Text>
         </TouchableOpacity>
 
         <Text style={styles.instructionText}>
@@ -260,7 +306,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 8,
     minWidth: 120,
-    zIndex: 1000,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   menuItem: {
     paddingVertical: 8,
@@ -319,6 +369,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#000',
+  },
+  syncButtonDisabled: {
+    opacity: 0.7,
   },
   instructionText: {
     fontFamily: 'Inter',

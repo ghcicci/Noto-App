@@ -18,13 +18,15 @@ Tech Stack:
 - Supabase (backend database + auth)
 - React Navigation
 
-Screens Completed:
+Screens Completed (October):
 - Welcome Screen
 - Login Screen (Existing user)
 - Signup Screen (New user)
 - Home/Task Screen
 - Calendar Screen
 
-Next:
-- Focus Mode Screen
-- Settings Screen (only allows user to signout right now)
+Focus Mode Screen (November)
+- Design in Figma
+- Go over with Chewon
+- Implement in code with up to 4 task and ability to input timer
+- Test
