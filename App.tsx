@@ -127,11 +127,14 @@ export default function App() {
 
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("🏁 [App.tsx] Initial session:", session?.user?.email || "null");
       setSession(session);
     });
 
     // Receive auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log("🔔 [App.tsx] Auth event:", event);
+      console.log("🔔 [App.tsx] Session:", session?.user?.email || "null");
       setSession(session);
     });
 

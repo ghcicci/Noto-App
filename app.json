@@ -2,17 +2,53 @@
   "expo": {
     "name": "TodoApp",
     "slug": "TodoApp",
-    "originalFullName": "@park1318/TodoApp",
+    "owner": "park1318",
     "scheme": "todoapp",
+    "originalFullName": "@park1318/TodoApp",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
-      "bundleIdentifier": "com.park1318.todoapp"
+      "bundleIdentifier": "com.park1318.todoapp",
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "package": "com.park1318.todoapp"
+      "package": "com.park1318.todoapp",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "todoapp",
+              "host": "*"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "plugins": [
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "12b2225a-9c0b-47b8-b4be-bf17242154db"
+      }
+    }
   }
 }
