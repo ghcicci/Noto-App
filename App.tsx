@@ -1,4 +1,5 @@
 // Registers navigation, global providers, and the auth gate (decides between Welcome/Login/Signup vs. main app)
+
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -7,8 +8,8 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/config/supabase';
 import * as Font from 'expo-font';
 
-// Icons for bottom bar (custom)
-import FontAwesome6 from '@expo/vector-icons/FontAwesome6'; 
+// Icons
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Feather from '@expo/vector-icons/Feather';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -25,14 +26,34 @@ import DayViewScreen from './src/screens/DayViewScreen';
 import FocusModeScreen from './src/screens/FocusModeScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 
+// ⭐ NEW: Timer Screen
+import FocusTimerScreen from './src/screens/FocusTimerScreen';
+
+// Navigator objects
 const AuthStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const CalendarStack = createNativeStackNavigator();
+const FocusStack = createNativeStackNavigator();
 
+// -------------------------
+// Focus Stack Navigator
+// -------------------------
+function FocusStackNavigator() {
+  return (
+    <FocusStack.Navigator screenOptions={{ headerShown: false }}>
+      <FocusStack.Screen name="FocusMode" component={FocusModeScreen} />
+      <FocusStack.Screen name="FocusTimer" component={FocusTimerScreen} />
+    </FocusStack.Navigator>
+  );
+}
+
+// -------------------------
+// Auth Navigator
+// -------------------------
 function AuthNavigator() {
   return (
-    <AuthStack.Navigator 
-      screenOptions={{ 
+    <AuthStack.Navigator
+      screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: '#000000' }
       }}
@@ -44,6 +65,9 @@ function AuthNavigator() {
   );
 }
 
+// -------------------------
+// Calendar stack
+// -------------------------
 function CalendarStackNavigator() {
   return (
     <CalendarStack.Navigator screenOptions={{ headerShown: false }}>
@@ -53,12 +77,15 @@ function CalendarStackNavigator() {
   );
 }
 
+// -------------------------
+// Main Bottom Tabs
+// -------------------------
 function MainTabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { 
+        tabBarStyle: {
           backgroundColor: '#000000',
           height: 74,
           borderTopWidth: 0,
@@ -71,8 +98,8 @@ function MainTabNavigator() {
         },
       }}
     >
-      <Tab.Screen 
-        name="Home" 
+      <Tab.Screen
+        name="Home"
         component={HomeScreen}
         options={{
           tabBarIcon: ({ color }) => (
@@ -80,8 +107,8 @@ function MainTabNavigator() {
           ),
         }}
       />
-      <Tab.Screen 
-        name="Calendar" 
+      <Tab.Screen
+        name="Calendar"
         component={CalendarStackNavigator}
         options={{
           tabBarIcon: ({ color }) => (
@@ -89,17 +116,17 @@ function MainTabNavigator() {
           ),
         }}
       />
-      <Tab.Screen 
-        name="Focus" 
-        component={FocusModeScreen}
+      <Tab.Screen
+        name="Focus"
+        component={FocusStackNavigator}   // ⭐ IMPORTANT: NOW USE FOCUS STACK
         options={{
           tabBarIcon: ({ color }) => (
             <Feather name="book-open" size={24} color={color} />
           ),
         }}
       />
-      <Tab.Screen 
-        name="Settings" 
+      <Tab.Screen
+        name="Settings"
         component={SettingsScreen}
         options={{
           tabBarIcon: ({ color }) => (
@@ -111,12 +138,14 @@ function MainTabNavigator() {
   );
 }
 
+// -------------------------
+// App
+// -------------------------
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [fontsLoaded, setFontsLoaded] = useState(false);
 
   useEffect(() => {
-    // Using basic Inter font (industry standard for these apps)
     async function loadFonts() {
       await Font.loadAsync({
         'Inter': require('./assets/fonts/Inter-VariableFont_opsz,wght.ttf'),
@@ -125,25 +154,20 @@ export default function App() {
     }
     loadFonts();
 
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log("🏁 [App.tsx] Initial session:", session?.user?.email || "null");
       setSession(session);
     });
 
-    // Receive auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("🔔 [App.tsx] Auth event:", event);
-      console.log("🔔 [App.tsx] Session:", session?.user?.email || "null");
+      console.log("🔔 [App.tsx] Session changed:", session?.user?.email || "null");
       setSession(session);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  if (!fontsLoaded) {
-    return null; // Or a loading screen
-  }
+  if (!fontsLoaded) return null;
 
   return (
     <NavigationContainer>
