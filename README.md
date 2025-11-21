@@ -1,8 +1,8 @@
-OAuth Integration (Google Login + Calendar Sync)
+## OAuth Integration (Google Login + Calendar Sync)
 
 This branch introduces full Google OAuth authentication and Google Calendar synchronization for the Noto productivity application. It adds secure Google login, token handling, calendar event integration, and the database structures required for stable two-way syncing.
 
-Overview
+## Overview
 
 This branch implements:
 
