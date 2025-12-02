@@ -10,6 +10,7 @@ import {
   Alert
 } from 'react-native';
 import { AntDesign, Entypo } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../config/supabase';
 
 // Same as Supabase
@@ -41,8 +42,13 @@ export default function HomeScreen() {
 
   useEffect(() => {
     loadUserData();
-    loadTasks();
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadTasks();
+    }, [])
+  );
 
   const loadUserData = async () => {
     const { data: { user } } = await supabase.auth.getUser();

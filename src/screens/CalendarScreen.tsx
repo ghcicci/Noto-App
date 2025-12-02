@@ -7,7 +7,7 @@ import {
   StyleSheet,
   ScrollView,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../config/supabase';
 
@@ -25,8 +25,13 @@ export default function CalendarScreen() {
 
   useEffect(() => {
     generateNext12Months();
-    loadTaskDates();
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadTaskDates();
+    }, [])
+  );
 
   const loadTaskDates = async () => {
     const { data: { user } } = await supabase.auth.getUser();
