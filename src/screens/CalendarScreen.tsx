@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { supabase } from '../config/supabase';
 
 type CalendarStackParamList = {
   CalendarView: undefined;
@@ -20,10 +21,37 @@ type NavigationProp = NativeStackNavigationProp<CalendarStackParamList, 'Calenda
 export default function CalendarScreen() {
   const navigation = useNavigation<NavigationProp>();
   const [months, setMonths] = useState<any[]>([]);
+  const [daysWithTasks, setDaysWithTasks] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     generateNext12Months();
+    loadTaskDates();
   }, []);
+
+  const loadTaskDates = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const today = new Date();
+    const startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endDate = new Date(today.getFullYear(), today.getMonth() + 12, 0);
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('due_date')
+      .eq('user_id', user.id)
+      .gte('due_date', startDate.toISOString())
+      .lte('due_date', endDate.toISOString());
+
+    if (error) {
+      console.error('Error loading task dates:', error);
+    } else if (data) {
+      const dates = new Set(
+        data.map((task) => task.due_date.split('T')[0])
+      );
+      setDaysWithTasks(dates);
+    }
+  };
 
   const generateNext12Months = () => {
     const monthsData = [];
@@ -74,13 +102,16 @@ export default function CalendarScreen() {
 
     // Add cells for each day of the month
     for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const hasTask = daysWithTasks.has(dateStr);
+
       currentWeek.push(
         <TouchableOpacity
           key={day}
           style={styles.dayCell}
           onPress={() => handleDayPress(year, month, day)}
         >
-          <Text style={styles.dayNumber}>{day}</Text>
+          <Text style={[styles.dayNumber, hasTask && styles.dayWithTask]}>{day}</Text>
         </TouchableOpacity>
       );
 
@@ -204,5 +235,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '300',
     color: '#fff',
+  },
+  dayWithTask: {
+    color: '#3FE3BF',
   },
 });

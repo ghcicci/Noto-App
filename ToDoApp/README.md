@@ -30,3 +30,8 @@ Focus Mode Screen (November)
 - Go over with Chewon
 - Implement in code with up to 4 task and ability to input timer
 - Test
+
+Added to Settings Screen (November):
+- Ability to change first name
+- Ability to change last name
+- Push the name changes to the Supabase profiles table
