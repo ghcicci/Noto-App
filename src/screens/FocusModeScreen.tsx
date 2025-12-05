@@ -1,5 +1,5 @@
 // Focus Mode Screen
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,13 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Platform,
 } from 'react-native';
 import { AntDesign, Entypo } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../config/supabase';
+import BleService from '../services/BleService';
 
 interface FocusTask {
   id: string;
@@ -24,6 +26,13 @@ export default function FocusModeScreen() {
   const navigation = useNavigation();
 
   const [tasks, setTasks] = useState<FocusTask[]>([]);
+
+  // 최신 tasks 상태를 추적하기 위한 ref (혹시 모를 상황 대비)
+  const tasksRef = useRef<FocusTask[]>([]);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
   const [newTaskText, setNewTaskText] = useState('');
   const [addingTask, setAddingTask] = useState(false);
   const [hours, setHours] = useState('');
@@ -84,7 +93,7 @@ export default function FocusModeScreen() {
     setAddingTask(false);
   };
 
-  // Toggle task (works even during active session)
+  // Toggle task
   const toggleTask = async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -96,7 +105,6 @@ export default function FocusModeScreen() {
     );
     setTasks(updated);
 
-    // If active session, also update DB
     if (activeSessionId) {
       const { error } = await supabase
         .from('focus_session_tasks')
@@ -108,7 +116,6 @@ export default function FocusModeScreen() {
         return;
       }
 
-      // Auto-end session if all tasks completed
       const allDone = updated.length > 0 && updated.every(t => t.completed);
       if (allDone) {
         await supabase
@@ -116,7 +123,6 @@ export default function FocusModeScreen() {
           .update({ completed: true })
           .eq('id', activeSessionId);
       }
-
       return;
     }
   };
@@ -128,10 +134,78 @@ export default function FocusModeScreen() {
     setMenuVisible(null);
   };
 
+  // --- [수정된 부분] BLE 전송 로직 ---
+  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const sendTasksToDevice = async () => {
+    try {
+      const hasPermission = await BleService.requestPermissions();
+      if (!hasPermission) {
+        Alert.alert('Permission Error', 'Bluetooth permissions are required.');
+        return false;
+      }
+
+      return new Promise<boolean>((resolve) => {
+        const timeout = setTimeout(() => {
+          BleService.manager.stopDeviceScan();
+          Alert.alert('Timeout', 'Could not find ESP32 device.');
+          resolve(false);
+        }, 10000);
+
+        BleService.scanAndConnect(async (device) => {
+          clearTimeout(timeout);
+          try {
+            await delay(1000);
+
+            // [순서 변경] 데이터 전송 안정성을 위해 TASK를 먼저 보냅니다.
+
+            // 1. Task 전송 (최대 4개)
+            for (let i = 0; i < tasks.length; i++) {
+              if (i >= 4) break;
+              const taskCmd = `TASK${i + 1}`; // TASK1, TASK2...
+              await BleService.sendData(taskCmd);
+              await delay(300);
+              await BleService.sendData(tasks[i].description);
+              await delay(300);
+            }
+
+            // 2. 초기 시간 전송
+            const h = hours || '0';
+            const m = minutes || '0';
+            // 분을 항상 2자리로 맞춤 (예: 1:05)
+            const initialTime = `${h}:${m.padStart(2, '0')}`;
+
+            await BleService.sendData("TIME");
+            await delay(300);
+            await BleService.sendData(initialTime);
+            await delay(300);
+
+            // 3. 포커스 모드 시작 알림 (ESP32: session_on = 1)
+            // 데이터를 다 보낸 후 마지막에 모드를 켭니다. (중간 패킷 유실 방지)
+            await BleService.sendData("FOCUS");
+            await delay(500); // 모드 전환 및 서보 준비 시간 확보
+
+            // 4. 화면 최종 갱신 (ESP32: updateDisplay)
+            await BleService.sendData("ON");
+
+            // 모니터링은 Timer 화면에서 수행하므로 여기서는 연결만 해두고 끝냄
+            resolve(true);
+          } catch (e) {
+            console.log(e);
+            resolve(false);
+          }
+        });
+      });
+    } catch (e) {
+      console.log('BLE Error', e);
+      return false;
+    }
+  };
+
   // Sync to device (create session)
   const handleSyncToDevice = async () => {
     if (activeSessionId) {
-      navigation.navigate('FocusTimer');
+      navigation.navigate('FocusTimer' as never);
       return;
     }
 
@@ -203,10 +277,21 @@ export default function FocusModeScreen() {
         String(totalMinutes * 60)
       );
 
-      navigation.navigate('FocusTimer');
-      Alert.alert('Success', 'Study session synced!');
+      // --- BLE 전송 실행 ---
+      if (Platform.OS !== 'web') {
+        const bleSuccess = await sendTasksToDevice();
+        if (!bleSuccess) {
+           Alert.alert("Notice", "Saved to cloud, but failed to sync with ESP32.");
+        } else {
+           // 성공 시 별도 알림 없이 자연스럽게 Timer 화면으로 이동
+        }
+      }
+
+      navigation.navigate('FocusTimer' as never);
+
     } catch (err) {
       Alert.alert('Error', 'Unexpected error occurred');
+      console.log(err);
     } finally {
       setSyncing(false);
     }
@@ -339,7 +424,7 @@ export default function FocusModeScreen() {
             {activeSessionId
               ? 'Return to Session'
               : syncing
-                ? 'Syncing...'
+                ? 'Syncing to Device...'
                 : 'Sync to device'}
           </Text>
         </TouchableOpacity>

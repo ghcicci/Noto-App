@@ -16,7 +16,9 @@
       "bundleIdentifier": "com.park1318.todoapp",
       "supportsTablet": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSBluetoothAlwaysUsageDescription": "Bluetooth is required for connection with ESP32 ",
+        "NSBluetoothPeripheralUsageDescription": "Bluetooth is required for connection with ESP32 "
       }
     },
     "android": {
@@ -25,6 +27,13 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -43,7 +52,18 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": [
+            "central"
+          ],
+          "bluetoothAlwaysPermission": "Allow App to connect to ESP32",
+          "bluetoothPeripheralPermission": "Allow App to connect to ESP32"
+        }
+      ]
     ],
     "extra": {
       "eas": {

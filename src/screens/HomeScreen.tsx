@@ -1,16 +1,18 @@
 // Home screen (add, edit, delete, complete tasks)
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
   ScrollView,
-  Alert
+  Alert,
+  Platform
 } from 'react-native';
 import { AntDesign, Entypo } from '@expo/vector-icons';
 import { supabase } from '../config/supabase';
+import BleService from '../services/BleService';
 
 // Same as Supabase
 interface Task {
@@ -23,12 +25,10 @@ interface Task {
   updated_at: string;
 }
 
-// Each task is assigned to a date for storage in Supabase
 interface GroupedTasks {
   [date: string]: Task[];
 }
 
-// Sets up react native variables
 export default function HomeScreen() {
   const [firstName, setFirstName] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -38,10 +38,52 @@ export default function HomeScreen() {
   const [editingTask, setEditingTask] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  // [기존] 실시간 tasks 참조용 Ref
+  const tasksRef = useRef<Task[]>([]);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
+  // [추가] ESP32에 전송된 Task들의 ID를 저장하는 Ref (순서 유지용)
+  const syncedTaskIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     loadUserData();
     loadTasks();
+  }, []);
+
+  // [추가] BLE 메시지 처리 함수 (리스너)
+  const handleBleMessage = (data: string) => {
+    const message = data.trim();
+    console.log("BLE Received:", message);
+
+    // 저장해둔 ID 목록에서 완료할 대상 찾기
+    const syncedIds = syncedTaskIdsRef.current;
+    let targetId = null;
+
+    if (message === "task1_done") targetId = syncedIds[0];
+    else if (message === "task2_done") targetId = syncedIds[1];
+    else if (message === "task3_done") targetId = syncedIds[2];
+    else if (message === "task4_done") targetId = syncedIds[3];
+
+    if (targetId) {
+      // tasksRef에서 최신 상태의 해당 Task 찾기
+      const currentTasks = tasksRef.current;
+      const targetTask = currentTasks.find(t => t.id === targetId);
+
+      // 이미 완료된 상태가 아니면 토글 실행
+      if (targetTask && !targetTask.completed) {
+        toggleTask(targetTask);
+        // Alert.alert("Task Completed", `'${targetTask.description}' checked!`);
+      }
+    }
+  };
+
+  // 앱 켤 때 혹시 연결되어 있으면 리스너 등록
+  useEffect(() => {
+    BleService.startMonitoring(handleBleMessage);
   }, []);
 
   const loadUserData = async () => {
@@ -52,10 +94,98 @@ export default function HomeScreen() {
         .select('first_name')
         .eq('id', user.id)
         .single();
-      
+
       if (profile) {
         setFirstName(profile.first_name || 'User');
       }
+    }
+  };
+
+  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const handleSyncTodayTasks = async () => {
+    const todayStr = dates[0];
+    const todayTasks = groupedTasks[todayStr] || [];
+    // 완료 안 된 것들 중 상위 4개
+    const targetTasks = todayTasks.filter(t => !t.completed).slice(0, 4);
+
+    if (targetTasks.length === 0) {
+      Alert.alert("알림", "오늘 할 일이 없거나 모두 완료되었습니다.");
+      return;
+    }
+
+    setSyncing(true);
+
+    try {
+      const hasPermission = await BleService.requestPermissions();
+      if (!hasPermission) {
+        Alert.alert('Permission Error', 'Bluetooth permissions are required.');
+        setSyncing(false);
+        return;
+      }
+
+      const success = await new Promise<boolean>((resolve) => {
+        const timeout = setTimeout(() => {
+          BleService.manager.stopDeviceScan();
+          Alert.alert('Timeout', 'ESP32를 찾을 수 없습니다.');
+          resolve(false);
+        }, 10000);
+
+        BleService.scanAndConnect(async (device) => {
+          clearTimeout(timeout);
+          try {
+            // [중요] 연결 성공 직후 모니터링 시작!
+            BleService.startMonitoring(handleBleMessage);
+
+            await delay(1000);
+
+            // [중요] 전송하는 Task들의 ID를 순서대로 저장 (나중에 완료 처리를 위해)
+            syncedTaskIdsRef.current = targetTasks.map(t => t.id);
+
+            // 1. Task 전송
+            for (let i = 0; i < targetTasks.length; i++) {
+              const taskCmd = `TASK${i + 1}`;
+              await BleService.sendData(taskCmd);
+              await delay(300);
+              await BleService.sendData(targetTasks[i].description);
+              await delay(300);
+            }
+
+            // 2. 시간 전송
+            const now = new Date();
+            const h = String(now.getHours());
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const timeStr = `${h}:${m}`;
+
+            await BleService.sendData("TIME");
+            await delay(300);
+            await BleService.sendData(timeStr);
+            await delay(300);
+
+            // 3. HOME 모드 시작 (잠금 X)
+            await BleService.sendData("HOME");
+            await delay(500);
+
+            // 4. 화면 갱신
+            await BleService.sendData("ON");
+
+            resolve(true);
+          } catch (e) {
+            console.log(e);
+            resolve(false);
+          }
+        });
+      });
+
+      if (success) {
+        Alert.alert("Success", "ESP32 received today's tasks.");
+      }
+
+    } catch (e) {
+      console.log("Sync Error:", e);
+      Alert.alert("Error", "전송 중 오류가 발생했습니다.");
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -63,11 +193,10 @@ export default function HomeScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Get tasks starting from today for the next 14 days
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const futureDate = new Date(today);
-    futureDate.setDate(today.getDate() + 13); // 14 days
+    futureDate.setDate(today.getDate() + 13);
     futureDate.setHours(23, 59, 59, 999);
 
     const { data, error } = await supabase
@@ -100,7 +229,6 @@ export default function HomeScreen() {
       return;
     }
 
-    // Create the task date at midnight in local timezone
     const taskDate = new Date(dateStr + 'T00:00:00');
 
     const { error } = await supabase
@@ -123,21 +251,27 @@ export default function HomeScreen() {
     setIsSubmitting(false);
   };
 
-  // Check to complete task (or opposite)
+  // [수정됨] 토글 로직을 안전하게 변경 (Functional Update 사용)
   const toggleTask = async (task: Task) => {
+    const newCompleted = !task.completed;
+
+    // 1. Optimistic Update (이전 상태를 기반으로 업데이트하여 Stale Closure 방지)
+    setTasks(prevTasks => prevTasks.map(t =>
+      t.id === task.id ? { ...t, completed: newCompleted } : t
+    ));
+
+    // 2. DB Update
     const { error } = await supabase
       .from('tasks')
-      .update({ completed: !task.completed })
+      .update({ completed: newCompleted })
       .eq('id', task.id);
 
     if (error) {
       Alert.alert('Error', 'Failed to update task');
-    } else {
-      loadTasks();
+      loadTasks(); // 실패 시 롤백
     }
   };
 
-  // Removing tasks
   const deleteTask = async (taskId: string) => {
     const { error } = await supabase
       .from('tasks')
@@ -152,7 +286,6 @@ export default function HomeScreen() {
     }
   };
 
-  // Editing tasks
   const startEdit = (task: Task) => {
     setEditingTask(task.id);
     setEditText(task.description);
@@ -178,10 +311,10 @@ export default function HomeScreen() {
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr + 'T00:00:00');
-    const options: Intl.DateTimeFormatOptions = { 
-      month: 'long', 
-      day: 'numeric', 
-      year: 'numeric' 
+    const options: Intl.DateTimeFormatOptions = {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
     };
     return date.toLocaleDateString('en-US', options);
   };
@@ -189,15 +322,11 @@ export default function HomeScreen() {
   const getNext14Days = () => {
     const dates = [];
     const now = new Date();
-    
-    // Get today's date in local timezone
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
+
     for (let i = 0; i < 14; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
-      
-      // Format as YYYY-MM-DD in local timezone
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -209,13 +338,11 @@ export default function HomeScreen() {
   const groupTasksByDate = (): GroupedTasks => {
     const grouped: GroupedTasks = {};
     const dates = getNext14Days();
-    
-    // Initialize all dates with empty arrays
+
     dates.forEach(date => {
       grouped[date] = [];
     });
 
-    // Group tasks by date
     tasks.forEach(task => {
       const taskDate = task.due_date.split('T')[0];
       if (grouped[taskDate]) {
@@ -230,7 +357,7 @@ export default function HomeScreen() {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const taskDate = new Date(dateStr + 'T00:00:00');
-    
+
     if (taskDate.getTime() === today.getTime()) {
       return 'Today';
     }
@@ -244,14 +371,25 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <ScrollView style={styles.scrollView}>
         <Text style={styles.greeting}>Hello, {firstName}</Text>
-        
+
+        <TouchableOpacity
+          style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
+          onPress={handleSyncTodayTasks}
+          disabled={syncing}
+        >
+          <AntDesign name="sync" size={16} color="#000" style={{ marginRight: 8 }} />
+          <Text style={styles.syncButtonText}>
+            {syncing ? "Syncing..." : "Sync Today's Tasks"}
+          </Text>
+        </TouchableOpacity>
+
         {dates.map((dateStr, index) => {
           const dateTasks = groupedTasks[dateStr] || [];
-          
+
           return (
             <View key={dateStr}>
               <Text style={styles.dateHeader}>{getDateLabel(dateStr)}</Text>
-              
+
               {dateTasks.map((task) => (
                 <View key={task.id} style={styles.taskRow}>
                   {editingTask === task.id ? (
@@ -270,7 +408,7 @@ export default function HomeScreen() {
                     </>
                   ) : (
                     <>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         onPress={() => toggleTask(task)}
                         style={styles.checkbox}
                       >
@@ -278,15 +416,15 @@ export default function HomeScreen() {
                           <AntDesign name="check" size={12} color="#3FE3BF" />
                         )}
                       </TouchableOpacity>
-                      <Text 
+                      <Text
                         style={[
-                          styles.taskText, 
+                          styles.taskText,
                           task.completed && styles.taskCompleted
                         ]}
                       >
                         {task.description}
                       </Text>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         onPress={() => setMenuVisible(menuVisible === task.id ? null : task.id)}
                         style={styles.menuButton}
                       >
@@ -295,13 +433,13 @@ export default function HomeScreen() {
 
                       {menuVisible === task.id && (
                         <View style={styles.menu}>
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             onPress={() => startEdit(task)}
                             style={styles.menuItem}
                           >
                             <Text style={styles.menuText}>Edit</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             onPress={() => deleteTask(task.id)}
                             style={styles.menuItem}
                           >
@@ -330,7 +468,7 @@ export default function HomeScreen() {
                   />
                 </View>
               ) : (
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => setActiveDate(dateStr)}
                   style={styles.taskRow}
                 >
@@ -446,5 +584,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#333',
     marginTop: 32,
     marginBottom: 16,
+  },
+  syncButton: {
+    backgroundColor: '#3FE3BF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  syncButtonText: {
+    fontFamily: 'Inter',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+  },
+  syncButtonDisabled: {
+    opacity: 0.7,
   },
 });
